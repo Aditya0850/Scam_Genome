@@ -12,6 +12,13 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any
 
+from dotenv import load_dotenv
+
+# Load .env once, before any Settings instance reads the environment.
+load_dotenv()
+
+_TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
+
 
 @dataclass(frozen=True, slots=True)
 class Settings:
@@ -31,8 +38,9 @@ class Settings:
             env_name = f.metadata.get("env")
             if env_name and env_name in os.environ:
                 value = os.environ[env_name]
-                if f.type is bool:
-                    object.__setattr__(self, f.name, value.lower() in ("1", "true", "yes", "on"))
+                # ``from __future__ import annotations`` makes f.type a string
+                if f.type in (bool, "bool"):
+                    object.__setattr__(self, f.name, value.strip().lower() in _TRUE_VALUES)
                 else:
                     object.__setattr__(self, f.name, value)
 
