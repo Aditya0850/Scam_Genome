@@ -41,10 +41,6 @@ LEET_MAP = {
 MULTI_LEET = {
     "rn": "m",
     "vv": "w",
-    "nn": "m",
-    "vv": "w",
-    "cl": "d",
-    "oi": "a",
 }
 
 
@@ -133,7 +129,8 @@ def _load_brand_data() -> dict[str, Any]:
     if _BRAND_DATA is not None:
         return _BRAND_DATA
 
-    brands_path = Path(__file__).parent.parent.parent / "data" / "brands.json"
+    # <repo root>/data/brands.json (parents: checks, trustlens, src, root)
+    brands_path = Path(__file__).resolve().parents[3] / "data" / "brands.json"
     with open(brands_path, "r", encoding="utf-8") as f:
         _BRAND_DATA = json.load(f)
 
@@ -189,17 +186,10 @@ def _deleet(s: str) -> str:
 
 
 def _extract_sld(host: str, registrable_domain: str) -> str:
-    """Extract the second-level domain (SLD) from host."""
-    if host == registrable_domain:
-        return registrable_domain.split(".")[0]
-
-    # Remove registrable domain suffix
-    if host.endswith("." + registrable_domain):
-        subdomain_part = host[: -len(registrable_domain) - 1]
-        # SLD is the last part before registrable domain
-        parts = subdomain_part.split(".")
-        return parts[-1] if parts else ""
-    return ""
+    """Extract the second-level domain (SLD): the first label of the registrable domain."""
+    if not registrable_domain:
+        return ""
+    return registrable_domain.split(".")[0]
 
 
 def _has_mixed_scripts(host: str) -> bool:
@@ -255,12 +245,17 @@ def _check_typosquat(sld: str, brand_names: list[str]) -> tuple[bool, str | None
         if sld_deleted == brand_deleted and sld_lower != brand_lower:
             return True, brand
 
-        # Levenshtein distance == 1
-        if Levenshtein.distance(sld_lower, brand_lower) == 1:
+        # Levenshtein distance == 1, only for brands of 5+ chars: short brands
+        # like "sbi" would otherwise match unrelated two-letter domains.
+        if len(brand_lower) >= 5 and Levenshtein.distance(sld_lower, brand_lower) == 1:
             return True, brand
 
         # Levenshtein on de-leeted
-        if Levenshtein.distance(sld_deleted, brand_deleted) == 1 and sld_lower != brand_lower:
+        if (
+            len(brand_lower) >= 5
+            and Levenshtein.distance(sld_deleted, brand_deleted) == 1
+            and sld_lower != brand_lower
+        ):
             return True, brand
 
     return False, None
@@ -360,27 +355,38 @@ async def run(target: NormalisedUrl, settings: Any = None) -> tuple[list[Finding
 
     # Skip brand spoofing checks for protected domains
     if not is_protected:
-        # 4. Brand in subdomain
-        host_parts = host.split(".")
-        for i, part in enumerate(host_parts[:-1]):  # Exclude TLD and SLD
+        # 4. Brand in subdomain (labels to the LEFT of the registrable domain only)
+        subdomain_labels: list[str] = []
+        if registrable_domain and host.endswith("." + registrable_domain):
+            subdomain_labels = host[: -len(registrable_domain) - 1].split(".")
+        for part in subdomain_labels:
             part_lower = part.lower()
-            for brand in _BRAND_DATA.get("brands", []):
-                brand_name = brand["name"].lower()
-                if brand_name in part_lower and part_lower != brand_name:
-                    findings.append(
-                        Finding(
-                            id="LEX_BRAND_SUBDOMAIN",
-                            check="lexical",
-                            title=f"Brand name '{brand['display_name']}' found in subdomain",
-                            severity=Severity.HIGH,
-                            evidence=f"Subdomain contains brand: {part} (full host: {host})",
-                            source="lexical_analysis",
-                            confidence=0.85,
-                            weight=45,
-                            impact="Attackers place brand names in subdomains to trick users (e.g., paypal.evil.com)",
-                            recommendation="Verify the registrable domain matches the official brand domain",
-                        )
-                    )
+            match = next(
+                (
+                    brand
+                    for brand in _BRAND_DATA.get("brands", [])
+                    if brand["name"].lower() in part_lower
+                    and part_lower != brand["name"].lower()
+                ),
+                None,
+            )
+            if match is None:
+                continue
+            findings.append(
+                Finding(
+                    id="LEX_BRAND_SUBDOMAIN",
+                    check="lexical",
+                    title=f"Brand name '{match['display_name']}' found in subdomain",
+                    severity=Severity.HIGH,
+                    evidence=f"Subdomain contains brand: {part} (full host: {host})",
+                    source="lexical_analysis",
+                    confidence=0.85,
+                    weight=45,
+                    impact="Attackers place brand names in subdomains to trick users (e.g., paypal.evil.com)",
+                    recommendation="Verify the registrable domain matches the official brand domain",
+                )
+            )
+            break  # at most one LEX_BRAND_SUBDOMAIN finding
 
         # 5. Brand combo-squatting in SLD
         if sld:
@@ -406,6 +412,7 @@ async def run(target: NormalisedUrl, settings: Any = None) -> tuple[list[Finding
                                 recommendation="Check if the registrable domain matches the official brand domain",
                             )
                         )
+                        break  # at most one LEX_BRAND_COMBO finding
 
         # 6. Typosquatting
         is_typosquat, matched_brand = _check_typosquat(sld, brand_names)
