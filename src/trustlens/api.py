@@ -143,17 +143,6 @@ async def anchor_report_endpoint(report_id: str) -> AnchorResponse:
     return AnchorResponse(**result)
 
 
-@app.get("/api/reports/{report_id}/verify", response_model=VerifyResponse)
-async def verify_report_endpoint(report_id: str) -> VerifyResponse:
-    """Verify a report's on-chain / hash-chained commitment."""
-    report = get_report(report_id)
-    if report is None:
-        raise HTTPException(status_code=404, detail="Report not found")
-
-    result = verify_on_chain(report_id)
-    return VerifyResponse(**result)
-
-
 # --- Frontend-compatible alias endpoints ---
 def _assessment_to_scan_response(assessment: Assessment) -> ScanResponse:
     """Convert internal Assessment to frontend ScanResponse format."""

@@ -211,7 +211,7 @@ async def generate_explanation(assessment: Assessment, settings: Settings | None
 
     # Try LLM if not offline and API key available
     if not settings.offline_mode:
-        has_key = bool(settings.groq_api_key or settings.nvidia_api_key or settings.anthropic_api_key)
+        has_key = bool(settings.groq_api_key or settings.nvidia_api_key)
         if has_key:
             prompt = _build_llm_prompt(assessment)
             llm_result = await _call_llm(prompt, settings)
