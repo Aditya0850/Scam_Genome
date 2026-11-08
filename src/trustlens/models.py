@@ -99,6 +99,7 @@ class Assessment(BaseModel):
         ],
         description="Known limitations",
     )
+    related_reports: list[dict] | None = Field(default=None, description="Campaign correlation reports")
     report_hash: str | None = Field(default=None, description="Hash of the report")
     tx_hash: str | None = Field(default=None, description="Blockchain transaction hash")
     timestamp: datetime = Field(

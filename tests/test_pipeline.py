@@ -61,7 +61,7 @@ async def test_pipeline_runs_all_checks():
     )
     assert result.classification == Classification.LOW_RISK
     assert result.score == 0  # clean public page with proper headers
-    assert [c.check for c in result.checks] == ["intel", "lexical", "safefetch", "headers"]
+    assert [c.check for c in result.checks] == ["intel", "lexical", "safefetch", "tls", "headers"]
     assert all(c.ran for c in result.checks)
     assert result.coverage == 1.0
     # safefetch status is carried into the assessment checks.
@@ -72,19 +72,22 @@ async def test_pipeline_runs_all_checks():
 async def test_pipeline_collects_safefetch_findings():
     # A loopback A record blocks the host; safefetch does not run, so its
     # status has ran=False. Lexical runs clean. Score=0.
-    # intel runs, lexical runs, safefetch blocked, headers skipped -> coverage = 2/4 = 0.5
+    # intel runs, lexical runs, safefetch blocked, tls skipped, headers skipped.
+    # Ran: intel, lexical (2). Not ran: safefetch, tls, headers (3). Coverage = 2/5 = 0.4
     resolver = FakeResolver({("example.com", "A"): ["127.0.0.1"]})
     result = await analyze_url(
         "https://example.com/",
         safefetch_transport=_html_transport(),
         safefetch_resolver=resolver,
     )
-    assert result.classification == Classification.LOW_RISK
+    assert result.classification == Classification.INCONCLUSIVE  # coverage < 0.5
     assert result.score == 0
     assert "safefetch" in result.unavailable_checks
     assert "headers" in result.unavailable_checks
+    assert "tls" in result.unavailable_checks
     assert any(f.id == "FETCH_SSRF_BLOCKED" for f in result.findings)
     assert not any(c.ran for c in result.checks if c.check == "safefetch")
     assert not any(c.ran for c in result.checks if c.check == "headers")
-    # Coverage: intel ran, lexical ran, safefetch not ran, headers not ran = 2/4 = 0.5
-    assert result.coverage == 0.5
+    assert not any(c.ran for c in result.checks if c.check == "tls")
+    # Coverage: intel ran, lexical ran, tls not ran, safefetch not ran, headers not ran = 2/5 = 0.4
+    assert result.coverage == 0.4
