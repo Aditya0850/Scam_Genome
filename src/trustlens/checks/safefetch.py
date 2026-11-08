@@ -8,13 +8,14 @@ IP allowlisting, redirect chain validation, and response size limits.
 from __future__ import annotations
 
 import ipaddress
-import socket
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urljoin, urlparse
 
-import httpx
 import dns.asyncresolver
 import dns.exception
+import dns.resolver
+import httpx
 
 from trustlens.checks.normalise import NormalisedUrl
 from trustlens.models import CheckStatus, FetchResult, Finding, Severity
@@ -22,6 +23,16 @@ from trustlens.models import CheckStatus, FetchResult, Finding, Severity
 
 class SSRFBlockedError(ValueError):
     """Raised when a URL resolves to a restricted or private network address."""
+
+    pass
+
+
+class FetchResolutionError(ValueError):
+    """Raised when DNS resolution fails (NXDOMAIN, timeout, no addresses).
+
+    This is deliberately distinct from SSRFBlockedError: an unresolvable host is
+    not a security block, so it must not produce an SSRF finding.
+    """
 
     pass
 
@@ -95,6 +106,15 @@ def is_ip_allowed(ip_str: str) -> bool:
         return False
 
 
+def _is_ip_literal(host: str) -> bool:
+    """Check whether host is already an IP address."""
+    try:
+        ipaddress.ip_address(host)
+        return True
+    except ValueError:
+        return False
+
+
 async def resolve_and_validate(
     host: str, is_ip: bool, resolver: dns.asyncresolver.Resolver | None = None
 ) -> list[str]:
@@ -110,6 +130,7 @@ async def resolve_and_validate(
         List of allowed IP addresses
 
     Raises:
+        FetchResolutionError: If no addresses could be resolved
         SSRFBlockedError: If any resolved IP is not allowed
     """
     if is_ip:
@@ -123,21 +144,20 @@ async def resolve_and_validate(
         resolver.timeout = 3.0
         resolver.lifetime = 3.0
 
-    try:
-        # Resolve A records (IPv4)
-        ipv4_answers = await resolver.resolve(host, "A")
-        ipv4_ips = [str(rdata) for rdata in ipv4_answers]
-
-        # Resolve AAAA records (IPv6)
-        ipv6_answers = await resolver.resolve(host, "AAAA")
-        ipv6_ips = [str(rdata) for rdata in ipv6_answers]
-    except dns.exception.DNSException as e:
-        raise SSRFBlockedError(f"DNS resolution failed for {host}: {e}") from e
-
-    all_ips = ipv4_ips + ipv6_ips
+    all_ips: list[str] = []
+    for record_type in ("A", "AAAA"):
+        try:
+            answers = await resolver.resolve(host, record_type)
+        except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
+            # No records of this type is normal (many hosts are A-only).
+            continue
+        except dns.exception.DNSException as e:
+            # Timeouts and server failures are not SSRF; report separately.
+            raise FetchResolutionError(f"DNS resolution failed for {host}: {e}") from e
+        all_ips.extend(str(rdata) for rdata in answers)
 
     if not all_ips:
-        raise SSRFBlockedError(f"No IP addresses resolved for {host}")
+        raise FetchResolutionError(f"No IP addresses resolved for {host}")
 
     # Validate all IPs - if ANY is not allowed, block
     for ip in all_ips:
@@ -168,55 +188,75 @@ class FetchConfig:
             }
 
 
+@dataclass(frozen=True)
+class _ResponseSnapshot:
+    """Response data captured while the streamed connection is still open."""
+
+    status_code: int
+    headers: dict[str, str]
+    url: str
+    content_type: str
+    body: bytes
+
+
+def _content_type_allowed(content_type: str) -> bool:
+    """Only text/html and JSON bodies are read."""
+    media_type = content_type.split(";", 1)[0].strip().lower()
+    return media_type in {"text/html", "application/json"}
+
+
+async def _read_limited_body(response: httpx.Response, config: FetchConfig) -> bytes:
+    """Read at most max_body_read bytes from a streamed response."""
+    body = bytearray()
+    async for chunk in response.aiter_bytes():
+        body.extend(chunk)
+        if len(body) >= config.max_body_read:
+            break
+    return bytes(body[: config.max_body_read])
+
+
 async def _fetch_single(
     client: httpx.AsyncClient,
     url: str,
     config: FetchConfig,
     resolver: dns.asyncresolver.Resolver | None = None,
-) -> tuple[httpx.Response, list[str], str]:
+) -> tuple[_ResponseSnapshot, list[str]]:
     """
-    Perform a single HTTP request with DNS validation.
+    Perform a single streamed HTTP request with DNS validation.
 
     Returns:
-        Tuple of (response, resolved_ips, final_url)
+        Tuple of (response snapshot, resolved_ips)
     """
-    # Parse URL to get host
-    from urllib.parse import urlparse
-
     parsed = urlparse(url)
     host = parsed.hostname or ""
     if not host:
         raise SSRFBlockedError("No hostname in URL")
 
-    # Resolve and validate DNS
-    # We need to check if host is IP
-    is_ip = False
-    try:
-        ipaddress.ip_address(host)
-        is_ip = True
-    except ValueError:
-        pass
+    resolved_ips = await resolve_and_validate(host, _is_ip_literal(host), resolver)
 
-    resolved_ips = await resolve_and_validate(host, is_ip, resolver)
-
-    # Make request with redirect following disabled
-    response = await client.request(
+    # Streaming keeps the network read bounded; other content types are never read.
+    async with client.stream(
         "GET",
         url,
         headers=config.headers,
         follow_redirects=False,
         timeout=config.timeout,
-    )
+    ) as response:
+        content_type = response.headers.get("content-type", "")
+        body = (
+            await _read_limited_body(response, config)
+            if _content_type_allowed(content_type)
+            else b""
+        )
+        snapshot = _ResponseSnapshot(
+            status_code=response.status_code,
+            headers=dict(response.headers),
+            url=str(response.url),
+            content_type=content_type,
+            body=body,
+        )
 
-    # Read limited body
-    body = b""
-    async for chunk in response.aiter_bytes():
-        body += chunk
-        if len(body) >= config.max_body_read:
-            body = body[: config.max_body_read]
-            break
-
-    return response, resolved_ips, str(response.url)
+    return snapshot, resolved_ips
 
 
 async def run(
@@ -240,7 +280,7 @@ async def run(
     config = FetchConfig()
     redirect_chain: list[str] = []
     all_findings: list[Finding] = []
-    final_response: httpx.Response | None = None
+    final_snapshot: _ResponseSnapshot | None = None
     final_resolved_ips: list[str] = []
     final_url = target.normalized
 
@@ -255,22 +295,20 @@ async def run(
 
         for hop in range(config.max_redirects + 1):
             # Fetch current URL
-            response, resolved_ips, response_url = await _fetch_single(client, current_url, config, resolver)
+            snapshot, resolved_ips = await _fetch_single(client, current_url, config, resolver)
 
             redirect_chain.append(current_url)
             final_resolved_ips = resolved_ips
-            final_url = response_url
-            final_response = response
+            final_url = snapshot.url
+            final_snapshot = snapshot
 
             # Check for redirect
-            if response.is_redirect and hop < config.max_redirects:
-                location = response.headers.get("location")
+            if 300 <= snapshot.status_code < 400 and hop < config.max_redirects:
+                location = snapshot.headers.get("location")
                 if not location:
                     break
 
                 # Resolve redirect URL
-                from urllib.parse import urljoin
-
                 next_url = urljoin(current_url, location)
 
                 # Re-validate DNS for redirect target
@@ -291,29 +329,9 @@ async def run(
                     )
                     break
 
-                # Validate redirect target DNS
-                try:
-                    is_ip = False
-                    try:
-                        ipaddress.ip_address(next_host)
-                        is_ip = True
-                    except ValueError:
-                        pass
-                    await resolve_and_validate(next_host, is_ip, resolver)
-                except SSRFBlockedError as e:
-                    all_findings.append(
-                        Finding(
-                            id="FETCH_REDIRECT_SSRF_BLOCKED",
-                            check="safefetch",
-                            title="Redirect blocked: resolves to restricted address",
-                            severity=Severity.HIGH,
-                            evidence=f"Redirect to {next_url} blocked: {e}",
-                            source="safefetch_ssrf_guard",
-                            confidence=1.0,
-                            weight=0,
-                        )
-                    )
-                    break
+                # Re-validate the redirect target before requesting it. A blocked
+                # target raises SSRFBlockedError, reported as FETCH_SSRF_BLOCKED.
+                await resolve_and_validate(next_host, _is_ip_literal(next_host), resolver)
 
                 current_url = next_url
                 continue
@@ -322,52 +340,49 @@ async def run(
             break
 
         # Build result
-        if final_response is not None:
-            # Create body preview
-            body_bytes = b""
-            async for chunk in final_response.aiter_bytes():
-                body_bytes += chunk
-                if len(body_bytes) >= config.max_body_read:
-                    body_bytes = body_bytes[: config.max_body_read]
-                    break
-
-            body_preview = body_bytes[: config.max_body_preview].decode("utf-8", errors="replace")
-
-            # Check content type
-            content_type = final_response.headers.get("content-type", "").lower()
-            allowed_types = ("text/html", "application/json", "text/plain", "application/xml", "text/xml")
-            if not any(content_type.startswith(t) for t in allowed_types):
-                all_findings.append(
-                    Finding(
-                        id="FETCH_UNSAFE_CONTENT_TYPE",
-                        check="safefetch",
-                        title=f"Potentially unsafe content type: {content_type}",
-                        severity=Severity.LOW,
-                        evidence=f"Response content-type: {content_type}",
-                        source="safefetch_content_type_check",
-                        confidence=0.5,
-                        weight=0,
-                    )
-                )
-
-            return FetchResult(
-                ok=True,
-                final_url=final_url,
-                resolved_ip=final_resolved_ips[0] if final_resolved_ips else None,
-                status_code=final_response.status_code,
-                headers=dict(final_response.headers),
-                redirect_chain=redirect_chain,
-                body_preview=body_preview,
-                findings=all_findings,
-                status=CheckStatus(check="safefetch", ran=True, reason=None),
-            )
-        else:
+        if final_snapshot is None:
             return FetchResult(
                 ok=False,
                 findings=all_findings,
                 status=CheckStatus(check="safefetch", ran=False, reason="No response received"),
             )
 
+        # Non-html/json bodies are never read, so the preview stays empty.
+        if not _content_type_allowed(final_snapshot.content_type):
+            all_findings.append(
+                Finding(
+                    id="FETCH_UNSAFE_CONTENT_TYPE",
+                    check="safefetch",
+                    title=f"Potentially unsafe content type: {final_snapshot.content_type}",
+                    severity=Severity.LOW,
+                    evidence=f"Response content-type: {final_snapshot.content_type}",
+                    source="safefetch_content_type_check",
+                    confidence=0.5,
+                    weight=0,
+                )
+            )
+
+        return FetchResult(
+            ok=True,
+            final_url=final_url,
+            resolved_ip=final_resolved_ips[0] if final_resolved_ips else None,
+            status_code=final_snapshot.status_code,
+            headers=final_snapshot.headers,
+            redirect_chain=redirect_chain,
+            body_preview=final_snapshot.body[: config.max_body_preview].decode(
+                "utf-8", errors="replace"
+            ),
+            findings=all_findings,
+            status=CheckStatus(check="safefetch", ran=True, reason=None),
+        )
+
+    except FetchResolutionError as e:
+        # Unresolvable host: not an SSRF block, so no SSRF finding.
+        return FetchResult(
+            ok=False,
+            findings=[],
+            status=CheckStatus(check="safefetch", ran=False, reason=str(e)),
+        )
     except SSRFBlockedError as e:
         return FetchResult(
             ok=False,
