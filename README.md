@@ -295,7 +295,7 @@ uv run python scripts/run_demo_cases.py
 | Frontend dashboard (5 tabs) | ✅ Implemented |
 | Demo mode (local simulation) | ✅ Implemented |
 | Auth flow (UI only, no backend) | ⚠️ Simulated (no real auth backend) |
-| Live demo deployment | ❌ Pending |
+| Live demo deployment | ✅ Implemented (https://scam-genome.vercel.app/) |
 | End-to-end test suite | ⚠️ Partial (backend only) |
 
 ### Blockchain / Local-Ledger Limitations
