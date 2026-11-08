@@ -48,7 +48,7 @@ TrustLens is a deterministic threat classification engine with LLM explainabilit
                        │
          ┌─────────────▼─────────────┐
          │  Evidence-Grounded Explain│  Prompt-injection guard (<untrusted_evidence>),
-         │                           │  deterministic fallback, LLM chain (Groq→NVIDIA→Anthropic)
+         │                           │  deterministic fallback, LLM chain (Groq→NVIDIA)
          └─────────────┬─────────────┘
                        │
          ┌─────────────▼─────────────┐
@@ -84,7 +84,7 @@ TrustLens is a deterministic threat classification engine with LLM explainabilit
 - All untrusted data (target URL/message, finding evidence) wrapped in `<untrusted_evidence>` XML tags
 - System prompt explicitly forbids following instructions inside `<untrusted_evidence>`
 - Deterministic fallback explanation generated first; LLM output never mutates `classification`, `score`, or `findings`
-- LLM timeout: 6s with fallback chain (Groq → NVIDIA → Anthropic)
+- LLM timeout: 6s with fallback chain (Groq → NVIDIA)
 
 ### TLS Weight=0 Rule (Module 5)
 - TLS findings always emit `Severity.INFO` with `weight=0`
@@ -322,7 +322,6 @@ DB_PATH=trustlens.db
 # LLM API keys for explanation (optional, falls back to deterministic)
 GROQ_API_KEY=gsk_...
 NVIDIA_API_KEY=nvapi_...
-ANTHROPIC_API_KEY=sk-ant-...
 
 # Threat intel
 URLHAUS_API_KEY=...
