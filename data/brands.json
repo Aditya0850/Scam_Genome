@@ -1,0 +1,191 @@
+{
+  "brands": [
+    {
+      "name": "sbi",
+      "display_name": "State Bank of India",
+      "official_domains": ["sbi.co.in", "sbi.com", "onlinesbi.com", "sbicard.com"],
+      "category": "banking"
+    },
+    {
+      "name": "hdfc",
+      "display_name": "HDFC Bank",
+      "official_domains": ["hdfcbank.com", "hdfc.com", "hdfcsecurities.com", "hdfclife.com"],
+      "category": "banking"
+    },
+    {
+      "name": "icici",
+      "display_name": "ICICI Bank",
+      "official_domains": ["icicibank.com", "icici.com", "icicisecurities.com", "iciciprulife.com"],
+      "category": "banking"
+    },
+    {
+      "name": "axisbank",
+      "display_name": "Axis Bank",
+      "official_domains": ["axisbank.com", "axisbank.co.in", "axisdirect.in"],
+      "category": "banking"
+    },
+    {
+      "name": "kotak",
+      "display_name": "Kotak Mahindra Bank",
+      "official_domains": ["kotak.com", "kotakmahindrabank.com", "kotaksecurities.com", "kotaklife.com"],
+      "category": "banking"
+    },
+    {
+      "name": "paytm",
+      "display_name": "Paytm",
+      "official_domains": ["paytm.com", "paytm.in", "paytmbank.com", "paytmmoney.com"],
+      "category": "upi"
+    },
+    {
+      "name": "phonepe",
+      "display_name": "PhonePe",
+      "official_domains": ["phonepe.com", "phonepe.in"],
+      "category": "upi"
+    },
+    {
+      "name": "razorpay",
+      "display_name": "Razorpay",
+      "official_domains": ["razorpay.com", "razorpay.in"],
+      "category": "payments"
+    },
+    {
+      "name": "npci",
+      "display_name": "National Payments Corporation of India",
+      "official_domains": ["npci.org.in", "upi.npci.org.in", "bhimupi.org.in"],
+      "category": "upi"
+    },
+    {
+      "name": "irctc",
+      "display_name": "Indian Railway Catering and Tourism Corporation",
+      "official_domains": ["irctc.co.in", "irctc.com"],
+      "category": "government"
+    },
+    {
+      "name": "uidai",
+      "display_name": "Unique Identification Authority of India",
+      "official_domains": ["uidai.gov.in", "uidai.in"],
+      "category": "government"
+    },
+    {
+      "name": "metamask",
+      "display_name": "MetaMask",
+      "official_domains": ["metamask.io", "metamask.com"],
+      "category": "web3"
+    },
+    {
+      "name": "binance",
+      "display_name": "Binance",
+      "official_domains": ["binance.com", "binance.us", "binance.net"],
+      "category": "web3"
+    },
+    {
+      "name": "coinbase",
+      "display_name": "Coinbase",
+      "official_domains": ["coinbase.com", "coinbase.pro"],
+      "category": "web3"
+    },
+    {
+      "name": "opensea",
+      "display_name": "OpenSea",
+      "official_domains": ["opensea.io", "opensea.com"],
+      "category": "web3"
+    },
+    {
+      "name": "google",
+      "display_name": "Google",
+      "official_domains": ["google.com", "google.co.in", "gmail.com", "youtube.com", "googleusercontent.com"],
+      "category": "tech"
+    },
+    {
+      "name": "microsoft",
+      "display_name": "Microsoft",
+      "official_domains": ["microsoft.com", "live.com", "outlook.com", "office.com", "azure.com"],
+      "category": "tech"
+    },
+    {
+      "name": "apple",
+      "display_name": "Apple",
+      "official_domains": ["apple.com", "icloud.com", "me.com", "mac.com"],
+      "category": "tech"
+    },
+    {
+      "name": "amazon",
+      "display_name": "Amazon",
+      "official_domains": ["amazon.com", "amazon.in", "aws.amazon.com", "amazonaws.com"],
+      "category": "tech"
+    },
+    {
+      "name": "facebook",
+      "display_name": "Meta/Facebook",
+      "official_domains": ["facebook.com", "fb.com", "instagram.com", "whatsapp.com", "meta.com"],
+      "category": "social"
+    },
+    {
+      "name": "twitter",
+      "display_name": "X/Twitter",
+      "official_domains": ["twitter.com", "x.com", "t.co"],
+      "category": "social"
+    },
+    {
+      "name": "linkedin",
+      "display_name": "LinkedIn",
+      "official_domains": ["linkedin.com", "lnkd.in"],
+      "category": "social"
+    },
+    {
+      "name": "github",
+      "display_name": "GitHub",
+      "official_domains": ["github.com", "github.io", "githubusercontent.com"],
+      "category": "tech"
+    },
+    {
+      "name": "netflix",
+      "display_name": "Netflix",
+      "official_domains": ["netflix.com", "nflxext.com"],
+      "category": "entertainment"
+    },
+    {
+      "name": "paypal",
+      "display_name": "PayPal",
+      "official_domains": ["paypal.com", "paypalobjects.com"],
+      "category": "payments"
+    },
+    {
+      "name": "stripe",
+      "display_name": "Stripe",
+      "official_domains": ["stripe.com", "stripe.net"],
+      "category": "payments"
+    },
+    {
+      "name": "coinbase",
+      "display_name": "Coinbase",
+      "official_domains": ["coinbase.com", "coinbase.pro"],
+      "category": "web3"
+    },
+    {
+      "name": "ethereum",
+      "display_name": "Ethereum Foundation",
+      "official_domains": ["ethereum.org", "etherscan.io"],
+      "category": "web3"
+    },
+    {
+      "name": "uniswap",
+      "display_name": "Uniswap",
+      "official_domains": ["uniswap.org", "app.uniswap.org"],
+      "category": "web3"
+    },
+    {
+      "name": "aadhaar",
+      "display_name": "Aadhaar",
+      "official_domains": ["uidai.gov.in", "eaadhaar.uidai.gov.in", "resident.uidai.gov.in"],
+      "category": "government"
+    },
+    {
+      "name": "incometax",
+      "display_name": "Income Tax India",
+      "official_domains": ["incometax.gov.in", "incometaxindia.gov.in", "eportal.incometax.gov.in"],
+      "category": "government"
+    }
+  ],
+  "protected_suffixes": ["gov.in", "ac.in", "edu", "gov", "mil", "bank.in"]
+}
