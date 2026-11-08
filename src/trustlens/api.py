@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from trustlens.chain import anchor_report, verify_on_chain
@@ -12,6 +13,15 @@ from trustlens.models import Assessment, MessageRequest, UrlRequest
 from trustlens.pipeline import analyze_url_from_request
 
 app = FastAPI(title="TrustLens API")
+
+# CORS middleware for frontend dev server access
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 class HealthResponse(BaseModel):

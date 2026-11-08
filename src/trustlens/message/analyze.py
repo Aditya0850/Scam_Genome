@@ -234,6 +234,7 @@ async def analyze_message(
     settings: Settings | None = None,
     save_to_db: bool = True,
     generate_explanation_flag: bool = True,
+    db_path: str | None = None,
 ) -> Assessment:
     """
     Analyze a message for scam/fraud indicators.
@@ -243,6 +244,7 @@ async def analyze_message(
         settings: Optional settings for URL analysis
         save_to_db: Whether to save report to database
         generate_explanation_flag: Whether to generate AI explanation
+        db_path: Optional database path for saving
 
     Returns:
         Assessment with message analysis findings
@@ -313,6 +315,7 @@ async def analyze_message(
         assessment = save_report(
             assessment,
             indicators=indicators,
+            db_path=db_path,
         )
 
     # Generate explanation

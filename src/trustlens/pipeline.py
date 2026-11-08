@@ -33,6 +33,7 @@ async def analyze_url(
     _settings: Any = None,
     save_to_db: bool = True,
     generate_explanation_flag: bool = True,
+    db_path: str | None = None,
 ) -> Assessment:
     """Normalise a URL, run intel, lexical, safefetch, tls, and headers checks, and score the result."""
     try:
@@ -126,6 +127,7 @@ async def analyze_url(
             assessment,
             registrable_domain=registrable_domain,
             resolved_ip=resolved_ip,
+            db_path=db_path,
         )
 
     # Generate explanation
