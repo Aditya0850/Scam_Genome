@@ -78,49 +78,21 @@ SUSPICIOUS_TLDS = {
     "webcam",
 }
 
-# Lure keywords commonly used in phishing URLs
-LURE_KEYWORDS = {
+# Lure keywords commonly used in phishing URLs (spec list, matched as whole tokens)
+LURE_KEYWORDS = (
     "login",
     "signin",
-    "sign-in",
     "verify",
-    "verification",
     "kyc",
     "update",
     "secure",
-    "security",
     "account",
     "wallet",
     "suspend",
-    "suspended",
     "refund",
     "unlock",
     "confirm",
-    "confirmation",
-    "validate",
-    "validation",
-    "authenticate",
-    "authentication",
-    "authorize",
-    "authorization",
-    "recover",
-    "recovery",
-    "reset",
-    "verify-now",
-    "verify-account",
-    "account-update",
-    "security-update",
-    "urgent",
-    "immediate",
-    "action-required",
-    "limited-time",
-    "expire",
-    "expiry",
-    "alert",
-    "notification",
-    "notice",
-    "warning",
-}
+)
 
 
 def _load_brand_data() -> dict[str, Any]:
@@ -366,7 +338,6 @@ async def run(target: NormalisedUrl, settings: Any = None) -> tuple[list[Finding
                     brand
                     for brand in _BRAND_DATA.get("brands", [])
                     if brand["name"].lower() in part_lower
-                    and part_lower != brand["name"].lower()
                 ),
                 None,
             )
@@ -433,8 +404,10 @@ async def run(target: NormalisedUrl, settings: Any = None) -> tuple[list[Finding
                 )
             )
 
-    # 7. Deep subdomains (>= 3 levels before registrable domain)
-    subdomain_count = len(host.split(".")) - len(registrable_domain.split(".")) - 1
+    # 7. Deep subdomains (>= 3 labels left of the registrable domain)
+    subdomain_count = (
+        len(host.split(".")) - len(registrable_domain.split(".")) if registrable_domain else 0
+    )
     if subdomain_count >= 3 and not is_protected:
         findings.append(
             Finding(
@@ -485,25 +458,25 @@ async def run(target: NormalisedUrl, settings: Any = None) -> tuple[list[Finding
             )
         )
 
-    # 10. Lure keywords in path/query (only if not protected)
+    # 10. Lure keywords in host, path and query (whole tokens only, not protected)
     if not is_protected:
-        path_query = (target.path + "?" + target.query).lower()
-        for keyword in LURE_KEYWORDS:
-            if keyword in path_query:
-                findings.append(
-                    Finding(
-                        id="LEX_LURE_KEYWORDS",
-                        check="lexical",
-                        title=f"Phishing lure keyword in path/query: '{keyword}'",
-                        severity=Severity.MEDIUM,
-                        evidence=f"Path/query contains lure term: {target.path}?{target.query}",
-                        source="lexical_analysis",
-                        confidence=0.6,
-                        weight=20,
-                        impact="Attackers use urgency and action keywords to manipulate users",
-                        recommendation="Be wary of URLs demanding immediate action or verification",
-                    )
+        haystack = f"{host} {target.path} {target.query}".lower()
+        tokens = set(re.split(r"[^a-z0-9]+", haystack))
+        matched = next((kw for kw in LURE_KEYWORDS if kw in tokens), None)
+        if matched:
+            findings.append(
+                Finding(
+                    id="LEX_LURE_KEYWORDS",
+                    check="lexical",
+                    title=f"Phishing lure keyword: '{matched}'",
+                    severity=Severity.MEDIUM,
+                    evidence=f"Host/path/query uses lure term '{matched}': {host}{target.path}",
+                    source="lexical_analysis",
+                    confidence=0.6,
+                    weight=20,
+                    impact="Attackers use urgency and action keywords to manipulate users",
+                    recommendation="Be wary of URLs demanding immediate action or verification",
                 )
-                break  # Only report once
+            )
 
     return findings, CheckStatus(check="lexical", ran=True, reason=None)
