@@ -293,9 +293,13 @@ function Verification({ report, onVerify, verifyState }) {
       <div className="panel glass"><Heading tag="h3">How verification works</Heading><div className="verify-steps">{["Canonicalise report JSON (sorted keys)","Recompute the Keccak-256 commitment","Read the anchored commitment from chain","Compare hashes and report the result"].map((s,i)=><div key={s}><span>{String(i+1).padStart(2,"0")}</span>{s}</div>)}</div><div className="notice"><LockKeyhole size={14}/> Never store raw URLs or personal message content on-chain.</div></div></div></div>;
 }
 
-function Reports({ report }) {
-  return <div className="page-content"><SectionHeading eyebrow="SECURITY OPERATIONS / REPORTS" title="Assessment history." description="A workspace for reviewing generated security assessments."/>
-    <div className="panel glass"><div className="panel-heading"><div><Heading tag="h3">Recent reports</Heading><p>Reports created in this browser session.</p></div><span className="count-chip">{report ? "1 REPORT" : "0 REPORTS"}</span></div>{report ? <div className="history-row"><div className="history-icon"><Globe2 size={17}/></div><div className="history-main"><b>{report.target}</b><small>{report.id} · {new Date(report.timestamp || Date.now()).toLocaleString()}</small></div><span className={`classification ${String(report.classification).toLowerCase()}`}>{report.classification}</span></div> : <div className="empty-state compact"><Heading tag="h3">No reports yet</Heading><p>Run your first URL scan to create an assessment.</p></div>}</div>
+function Reports({ reports, onRefresh }) {
+  return <div className="page-content"><SectionHeading eyebrow="SECURITY OPERATIONS / REPORTS" title="Assessment history." description="A workspace for reviewing generated security assessments." right={onRefresh && <button className="secondary-button" onClick={onRefresh}><ArrowUpRight size={14}/> Refresh</button>}/>
+    <div className="panel glass"><div className="panel-heading"><div><Heading tag="h3">Recent reports</Heading><p>Reports stored in the backend database.</p></div><span className="count-chip">{reports.length} REPORT{reports.length !== 1 ? "S" : ""}</span></div>{reports.length > 0 ? <div className="history-list">{(reports || []).slice().reverse().map((r, i) => <motion.div className="history-row" key={r.id || i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * .05 }}>
+      <div className="history-icon"><Globe2 size={17}/></div>
+      <div className="history-main"><b>{r.target}</b><small>{r.id} · {new Date(r.timestamp || Date.now()).toLocaleString()}</small></div>
+      <span className={`classification ${String(r.classification).toLowerCase()}`}>{r.classification}</span>
+    </motion.div>)}</div> : <div className="empty-state compact"><Heading tag="h3">No reports yet</Heading><p>Run your first URL scan to create an assessment.</p></div>}</div>
   </div>;
 }
 
@@ -332,12 +336,44 @@ export default function App() {
   const [view, setView] = useState(() => window.location.hash === "#dashboard" ? "dashboard" : window.location.hash === "#auth" ? "auth" : "landing");
   const [authMode, setAuthMode] = useState("signin");
   const [active, setActive] = useState("overview");
-  const [report, setReport] = useState(null);
+  const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(false);
   const [registering, setRegistering] = useState(false);
   const [verifyState, setVerifyState] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const reduceMotion = useReducedMotion();
+
+  // Latest report for overview/dashboard display
+  const report = reports[reports.length - 1] || null;
+
+  // Fetch reports from backend on mount
+  useEffect(() => {
+    async function loadReports() {
+      try {
+        const res = await fetch(`${API}/api/reports?limit=50`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.reports && Array.isArray(data.reports)) {
+            // Convert backend report format to frontend format
+            const formatted = data.reports.map(r => ({
+              id: r.report_id,
+              target: r.target,
+              classification: r.classification.replace("_", " ").replace(/\b\w/g, c => c.toUpperCase()),
+              risk_score: r.score,
+              coverage: 100, // Not provided by /api/reports list endpoint
+              timestamp: r.created_at,
+              findings: [],
+              unavailable_checks: []
+            }));
+            setReports(formatted);
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to load reports:", e);
+      }
+    }
+    loadReports();
+  }, []);
 
   useEffect(() => {
     document.documentElement.style.scrollBehavior = reduceMotion ? "auto" : "smooth";
@@ -352,6 +388,30 @@ export default function App() {
   const enterDashboard = () => { window.location.hash = "dashboard"; setView("dashboard"); };
   const openAuth = (mode = "signin") => { setAuthMode(mode); window.location.hash = "auth"; setView("auth"); window.scrollTo({ top: 0, behavior: "smooth" }); };
   const goHome = () => { history.replaceState(null, "", window.location.pathname + window.location.search); setView("landing"); };
+
+  async function refreshReports() {
+    try {
+      const res = await fetch(`${API}/api/reports?limit=50`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.reports && Array.isArray(data.reports)) {
+          const formatted = data.reports.map(r => ({
+            id: r.report_id,
+            target: r.target,
+            classification: r.classification.replace("_", " ").replace(/\b\w/g, c => c.toUpperCase()),
+            risk_score: r.score,
+            coverage: 100,
+            timestamp: r.created_at,
+            findings: [],
+            unavailable_checks: []
+          }));
+          setReports(formatted);
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to refresh reports:", e);
+    }
+  }
 
   async function scan(input, kind = "url") {
     setLoading(true); setVerifyState(null);
@@ -371,7 +431,8 @@ export default function App() {
         if (!res.ok) throw new Error(`Analysis failed (${res.status})`);
         result = await res.json();
       }
-      setReport(result); setActive("overview");
+      setReports(prev => [...prev, result]);
+      setActive("reports"); // Navigate to reports page after scan
     } catch (e) {
       alert(`${e.message}. Check that the FastAPI backend is running and VITE_API_BASE_URL is correct.`);
     } finally { setLoading(false); }
@@ -406,12 +467,19 @@ export default function App() {
     } catch(e) { setVerifyState({ok:false,title:"Verification error",detail:e.message}); }
   }
 
+  // Refresh reports when reports tab becomes active
+  useEffect(() => {
+    if (active === "reports") {
+      refreshReports();
+    }
+  }, [active]);
+
   const page = active === "message-scanner"
     ? <MessageScanner onScan={v=>scan(v,"message")} loading={loading}/>
     : active === "verification"
     ? <Verification report={report} onVerify={verify} verifyState={verifyState}/>
     : active === "reports"
-    ? <Reports report={report}/>
+    ? <Reports reports={reports} onRefresh={refreshReports}/>
     : active === "url-scanner"
     ? <div className="page-content"><SectionHeading eyebrow="SECURITY OPERATIONS / URL INTELLIGENCE" title="Investigate a URL." description="Inspect a destination with layered, evidence-backed security checks."/><ScanPanel onScan={v=>scan(v)} loading={loading}/>{report && <div className="report-grid"><ReportCard report={report} onRegister={register} registering={registering} onVerify={verify}/><div><div className="subsection-head"><div><Heading tag="h3">Evidence & findings</Heading><p>Signals contributing to this assessment</p></div></div><Findings report={report}/></div></div>}</div>
     : <Overview report={report} onScan={v=>scan(v)} loading={loading} onRegister={register} registering={registering} onVerify={verify}/>;
