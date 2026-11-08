@@ -1,0 +1,65 @@
+0 verbose cli C:\Program Files\nodejs\node.exe C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js
+1 info using npm@11.17.0
+2 info using node@v24.19.0
+3 silly config load:file:C:\Program Files\nodejs\node_modules\npm\npmrc
+4 silly config load:file:C:\Users\Suman\Downloads\trustlens-react\.npmrc
+5 silly config load:file:C:\Users\Suman\.npmrc
+6 silly config load:file:C:\Users\Suman\Downloads\trustlens-react\etc\npmrc
+7 verbose title npm install spring-text-engine@0.1.5 @react-spring/web
+8 verbose argv "--cache" "C:\\Users\\Suman\\Downloads\\trustlens-react\\.npm-cache" "--prefix" "C:\\Users\\Suman\\Downloads\\trustlens-react" "install" "spring-text-engine@0.1.5" "@react-spring/web" "--no-audit" "--no-fund"
+9 verbose logfile logs-max:10 dir:C:\Users\Suman\Downloads\trustlens-react\.npm-cache\_logs\2026-11-08T17_36_20_182Z-
+10 verbose logfile C:\Users\Suman\Downloads\trustlens-react\.npm-cache\_logs\2026-11-08T17_36_20_182Z-debug-0.log
+11 silly logfile done cleaning log files
+12 silly packumentCache heap:4496293888 maxSize:1124073472 maxEntrySize:562036736
+13 http fetch GET https://registry.npmjs.org/npm attempt 1 failed with EACCES
+14 silly idealTree buildDeps
+15 silly fetch manifest spring-text-engine@0.1.5
+16 silly packumentCache full:https://registry.npmjs.org/spring-text-engine cache-miss
+17 http fetch GET https://registry.npmjs.org/spring-text-engine attempt 1 failed with EACCES
+18 http fetch GET https://registry.npmjs.org/npm attempt 2 failed with EACCES
+19 http fetch GET https://registry.npmjs.org/spring-text-engine attempt 2 failed with EACCES
+20 http fetch GET https://registry.npmjs.org/npm attempt 3 failed with EACCES
+21 http fetch GET https://registry.npmjs.org/spring-text-engine attempt 3 failed with EACCES
+22 silly fetch manifest @react-spring/web@*
+23 silly packumentCache full:https://registry.npmjs.org/@react-spring%2fweb cache-miss
+24 http fetch GET https://registry.npmjs.org/@react-spring%2fweb attempt 1 failed with EACCES
+25 http fetch GET https://registry.npmjs.org/@react-spring%2fweb attempt 2 failed with EACCES
+26 http fetch GET https://registry.npmjs.org/@react-spring%2fweb attempt 3 failed with EACCES
+27 silly placeDep ROOT @react-spring/web@ OK for: trustlens-react@1.0.0 want: *
+28 silly placeDep ROOT spring-text-engine@ OK for: trustlens-react@1.0.0 want: 0.1.5
+29 verbose type system
+30 verbose stack FetchError: request to https://registry.npmjs.org/@react-spring%2fweb failed, reason: 
+30 verbose stack     at ClientRequest.<anonymous> (C:\Program Files\nodejs\node_modules\npm\node_modules\minipass-fetch\lib\index.js:130:14)
+30 verbose stack     at ClientRequest.emit (node:events:509:28)
+30 verbose stack     at emitErrorEvent (node:_http_client:112:11)
+30 verbose stack     at _destroy (node:_http_client:1144:9)
+30 verbose stack     at onSocketNT (node:_http_client:1165:5)
+30 verbose stack     at process.processTicksAndRejections (node:internal/process/task_queues:91:21)
+31 error code EACCES
+32 error errno EACCES
+33 error FetchError: request to https://registry.npmjs.org/@react-spring%2fweb failed, reason: 
+33 error     at ClientRequest.<anonymous> (C:\Program Files\nodejs\node_modules\npm\node_modules\minipass-fetch\lib\index.js:130:14)
+33 error     at ClientRequest.emit (node:events:509:28)
+33 error     at emitErrorEvent (node:_http_client:112:11)
+33 error     at _destroy (node:_http_client:1144:9)
+33 error     at onSocketNT (node:_http_client:1165:5)
+33 error     at process.processTicksAndRejections (node:internal/process/task_queues:91:21) {
+33 error   code: 'EACCES',
+33 error   errno: 'EACCES',
+33 error   type: 'system',
+33 error   requiredBy: '.'
+33 error }
+34 error
+34 error The operation was rejected by your operating system.
+34 error It's possible that the file was already in use (by a text editor or antivirus), or that you lack permissions to access it.
+34 error
+34 error If you believe this might be a permissions issue, please double-check the permissions of the file and its containing directories, or try running the command again as root/Administrator.
+35 silly unfinished npm timer reify 1794159381085
+36 silly unfinished npm timer reify:loadTrees 1794159381087
+37 verbose cwd C:\Users\Suman\Downloads\trustlens-react
+38 verbose os Windows_NT 10.0.26300
+39 verbose node v24.19.0
+40 verbose npm  v11.17.0
+41 verbose exit 1
+42 verbose code 1
+43 error A complete log of this run can be found in: C:\Users\Suman\Downloads\trustlens-react\.npm-cache\_logs\2026-11-08T17_36_20_182Z-debug-0.log
