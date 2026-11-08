@@ -114,7 +114,7 @@ def test_generate_explanation_offline_mode_uses_deterministic() -> None:
 @pytest.mark.asyncio
 async def test_generate_explanation_no_api_key_uses_deterministic() -> None:
     """Without API key, should use deterministic explanation."""
-    settings = Settings(offline_mode=False, groq_api_key="", nvidia_api_key="", anthropic_api_key="")
+    settings = Settings(offline_mode=False, groq_api_key="", nvidia_api_key="")
     assessment = _make_assessment(
         classification=Classification.CONFIRMED_MALICIOUS,
         score=100,

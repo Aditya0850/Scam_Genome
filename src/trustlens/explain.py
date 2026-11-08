@@ -136,13 +136,11 @@ Provide a clear, evidence-grounded explanation of this assessment for a non-tech
 
 async def _call_llm(prompt: str, settings: Settings) -> str | None:
     """Call configured LLM API with timeout."""
-    # Priority: GROQ -> NVIDIA -> Anthropic
+    # Priority: GROQ -> NVIDIA
     if settings.groq_api_key:
         return await _call_groq(prompt, settings.groq_api_key)
     elif settings.nvidia_api_key:
         return await _call_nvidia(prompt, settings.nvidia_api_key)
-    elif settings.anthropic_api_key:
-        return await _call_anthropic(prompt, settings.anthropic_api_key)
     return None
 
 
@@ -175,7 +173,7 @@ async def _call_nvidia(prompt: str, api_key: str) -> str | None:
                 "https://integrate.api.nvidia.com/v1/chat/completions",
                 headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                 json={
-                    "model": "nvidia/nemotron-3-ultra",
+                    "model": "meta/llama-3.3-70b-instruct",
                     "messages": [{"role": "user", "content": prompt}],
                     "temperature": 0.1,
                     "max_tokens": 800,
@@ -184,31 +182,6 @@ async def _call_nvidia(prompt: str, api_key: str) -> str | None:
             response.raise_for_status()
             data = response.json()
             return data["choices"][0]["message"]["content"].strip()
-    except Exception:
-        return None
-
-
-async def _call_anthropic(prompt: str, api_key: str) -> str | None:
-    """Call Anthropic API."""
-    try:
-        async with httpx.AsyncClient(timeout=6.0) as client:
-            response = await client.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={
-                    "x-api-key": api_key,
-                    "anthropic-version": "2023-06-01",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": "claude-3-haiku-20240307",
-                    "max_tokens": 800,
-                    "temperature": 0.1,
-                    "messages": [{"role": "user", "content": prompt}],
-                },
-            )
-            response.raise_for_status()
-            data = response.json()
-            return data["content"][0]["text"].strip()
     except Exception:
         return None
 

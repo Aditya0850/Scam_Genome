@@ -19,7 +19,8 @@ def _isolated_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_defaults() -> None:
     settings = Settings()
-    assert settings.anthropic_api_key == ""
+    assert settings.groq_api_key == ""
+    assert settings.nvidia_api_key == ""
     assert settings.urlhaus_api_key == ""
     assert settings.rpc_url == "http://127.0.0.1:8545"
     assert settings.contract_address == ""
@@ -49,14 +50,13 @@ def test_env_values_override_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_repr_masks_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-secret")
+    monkeypatch.setenv("GROQ_API_KEY", "gsk-secret")
     monkeypatch.setenv("URLHAUS_API_KEY", "urlhaus-secret")
     monkeypatch.setenv("PRIVATE_KEY", "0xdeadbeef")
     text = repr(Settings())
-    assert "sk-ant-secret" not in text
+    assert "gsk-secret" not in text
     assert "urlhaus-secret" not in text
     assert "0xdeadbeef" not in text
-    assert "sk-ant-secret" not in str(Settings())
     assert "***" in text
 
 

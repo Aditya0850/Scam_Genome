@@ -24,7 +24,6 @@ _TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
 class Settings:
     """Application settings loaded from environment variables."""
 
-    anthropic_api_key: str = field(default="", metadata={"env": "ANTHROPIC_API_KEY"})
     groq_api_key: str = field(default="", metadata={"env": "GROQ_API_KEY"})
     nvidia_api_key: str = field(default="", metadata={"env": "NVIDIA_API_KEY"})
     urlhaus_api_key: str = field(default="", metadata={"env": "URLHAUS_API_KEY"})
