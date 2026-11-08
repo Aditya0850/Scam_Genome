@@ -68,6 +68,19 @@ def test_interior_whitespace_is_rejected(url: str) -> None:
         normalise_url(url)
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://evil.com\\@good.com",
+        "http://x.com/\x00",
+        "http://x.com/\x1f",
+    ],
+)
+def test_backslashes_and_control_chars_are_rejected(url: str) -> None:
+    with pytest.raises(NormalisationError, match="control characters or backslashes"):
+        normalise_url(url)
+
+
 def test_surrounding_whitespace_is_stripped() -> None:
     result = normalise_url("  http://x.com  ")
     assert result.original == "  http://x.com  "

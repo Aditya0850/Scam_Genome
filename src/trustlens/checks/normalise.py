@@ -53,7 +53,6 @@ _tld_extract = tldextract.TLDExtract(
 CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f]")
 BACKSLASH_RE = re.compile(r"\\")
 WHITESPACE_RE = re.compile(r"\s")
-
 # IPv4 forms. Only a strict dotted quad is accepted as an IPv4 literal;
 # numeric spellings such as 0177.0.0.1, 0x7f.1 and 2130706433 are rejected.
 IPV4_RE = re.compile(r"^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$")
@@ -74,11 +73,10 @@ DEFAULT_PORTS = {"http": 80, "https": 443}
 VALID_SCHEMES = {"http", "https"}
 
 
-def _strip_control_chars(s: str) -> str:
-    """Remove control characters and backslashes (whitespace is rejected, not removed)."""
-    s = CONTROL_CHARS_RE.sub("", s)
-    s = BACKSLASH_RE.sub("", s)
-    return s
+def _reject_control_chars(s: str) -> None:
+    """Reject control characters and backslashes rather than silently deleting them."""
+    if CONTROL_CHARS_RE.search(s) or BACKSLASH_RE.search(s):
+        raise NormalisationError("URL contains control characters or backslashes")
 
 
 def _validate_host(host: str) -> None:
@@ -141,13 +139,16 @@ def normalise_url(url: str) -> NormalisedUrl:
 
     original = url
 
+    # Control characters are checked before stripping: several of them (\x1f)
+    # also count as whitespace, so stripping first would silently drop them.
+    _reject_control_chars(url)
+
     # Surrounding whitespace is stripped; whitespace inside the URL is rejected,
     # never silently removed: "exa mple.com" must not collapse into "example.com".
     url = url.strip()
     if WHITESPACE_RE.search(url):
         raise NormalisationError("URL contains whitespace")
 
-    url = _strip_control_chars(url)
     if not url:
         raise NormalisationError("Empty URL")
 
