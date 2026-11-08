@@ -69,6 +69,13 @@ class ExtractionResult:
 URL_PATTERN = re.compile(
     r"""
     (?:
+        # Obfuscated dot forms first: the plain forms below stop at "[",
+        # which would truncate "hxxp://evil[.]com" to "hxxp://evil".
+        (?:https?://|www\.|hxxps?://)?[^\s<>"{}|\\^`\[\]]+\[.\][^\s<>"{}|\\^`\[\]]+
+        |
+        # Obfuscated: (.) instead of .
+        (?:https?://|www\.|hxxps?://)?[^\s<>"{}|\\^`\[\]]+\(\.\)[^\s<>"{}|\\^`\[\]]+
+        |
         # Standard URLs
         https?://[^\s<>"{}|\\^`\[\]]+
         |
@@ -77,15 +84,6 @@ URL_PATTERN = re.compile(
         |
         # Obfuscated: hxxp, hxxps
         hxxps?://[^\s<>"{}|\\^`\[\]]+
-        |
-        # Obfuscated: [.] instead of .
-        (?:https?://|www\.)?[^\s<>"{}|\\^`\[\]]+\[.\][^\s<>"{}|\\^`\[\]]+
-        |
-        # Obfuscated: (.) instead of .
-        (?:https?://|www\.)?[^\s<>"{}|\\^`\[\]]+\(\.\)[^\s<>"{}|\\^`\[\]]+
-        |
-        # Obfuscated: hxxp with [.]
-        hxxps?://[^\s<>"{}|\\^`\[\]]+\[.\][^\s<>"{}|\\^`\[\]]+
     )
     """,
     re.IGNORECASE | re.VERBOSE,
@@ -110,8 +108,8 @@ PHONE_PATTERN = re.compile(
     r"""
     (?<!\d)
     (?:
-        # Indian mobile: +91, 91, 0 prefix
-        (?:\+91|91|0)?[6-9]\d{9}
+        # Indian mobile: +91, 91, 0 prefix, optionally spaced or dashed
+        (?:(?:\+91|91|0)[- ]?)?[6-9]\d{4}[- ]?\d{5}
         |
         # International: +CC or 00CC
         (?:\+|00)\d{1,3}\s?\d{6,14}
@@ -275,6 +273,8 @@ def _normalize_phone(phone: str) -> tuple[str, str | None]:
         return "+" + cleaned, "IN"
     if cleaned.startswith("0") and len(cleaned) == 11 and cleaned[1] in "6789":
         return "+91" + cleaned[1:], "IN"
+    if len(cleaned) == 10 and cleaned[0] in "6789":
+        return "+91" + cleaned, "IN"
 
     # Try to detect country code
     if cleaned.startswith("+"):
