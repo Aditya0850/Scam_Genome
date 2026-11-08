@@ -217,7 +217,7 @@ def normalise_url(url: str) -> NormalisedUrl:
 
     # Use tldextract for registrable domain
     extracted = _tld_extract(ascii_host)
-    registrable_domain = extracted.registered_domain
+    registrable_domain = extracted.top_domain_under_public_suffix
     suffix = extracted.suffix
 
     # Build normalized URL

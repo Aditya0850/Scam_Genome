@@ -93,7 +93,7 @@
     {
       "name": "google",
       "display_name": "Google",
-      "official_domains": ["google.com", "google.co.in", "gmail.com", "youtube.com", "googleusercontent.com"],
+      "official_domains": ["google.com", "google.co.in", "gmail.com", "youtube.com"],
       "category": "tech"
     },
     {
@@ -111,7 +111,7 @@
     {
       "name": "amazon",
       "display_name": "Amazon",
-      "official_domains": ["amazon.com", "amazon.in", "aws.amazon.com", "amazonaws.com"],
+      "official_domains": ["amazon.com", "amazon.in"],
       "category": "tech"
     },
     {
@@ -135,7 +135,7 @@
     {
       "name": "github",
       "display_name": "GitHub",
-      "official_domains": ["github.com", "github.io", "githubusercontent.com"],
+      "official_domains": ["github.com", "githubusercontent.com"],
       "category": "tech"
     },
     {
@@ -155,12 +155,6 @@
       "display_name": "Stripe",
       "official_domains": ["stripe.com", "stripe.net"],
       "category": "payments"
-    },
-    {
-      "name": "coinbase",
-      "display_name": "Coinbase",
-      "official_domains": ["coinbase.com", "coinbase.pro"],
-      "category": "web3"
     },
     {
       "name": "ethereum",

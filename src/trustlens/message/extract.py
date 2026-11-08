@@ -108,6 +108,7 @@ EMAIL_PATTERN = re.compile(
 # Phone patterns (Indian and international)
 PHONE_PATTERN = re.compile(
     r"""
+    (?<!\d)
     (?:
         # Indian mobile: +91, 91, 0 prefix
         (?:\+91|91|0)?[6-9]\d{9}
@@ -118,17 +119,19 @@ PHONE_PATTERN = re.compile(
         # Landline with STD code
         0\d{2,4}[-\s]?\d{6,8}
     )
+    (?!\d)
     """,
     re.VERBOSE,
 )
 
-# UPI ID pattern: handle@bank
+# UPI ID pattern: handle@bank, but never the local part of an email
 UPI_PATTERN = re.compile(
     r"""
     \b
     [a-zA-Z0-9._-]{1,64}
     @
     [a-zA-Z]{2,32}
+    (?!\.[a-zA-Z])   # an email domain (user@example.com) is not a UPI ID
     \b
     """,
     re.VERBOSE,
