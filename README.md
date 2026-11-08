@@ -1,458 +1,310 @@
-# TrustLens: Deterministic Threat Classification Engine
+# TrustLens (Scam Genome)
 
-TrustLens is a deterministic threat classification engine with LLM explainability, designed for URL and message (SMS/email) scam detection. It combines static analysis, threat intelligence, safe network fetching, TLS analysis, and security headers inspection — with cryptographic audit trails and optional on-chain anchoring.
-
-## System Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        TrustLens Pipeline                       │
-├─────────────────────────────────────────────────────────────────┤
-│  Input: URL or Message Text                                     │
-└──────────────────────┬──────────────────────────────────────────┘
-                       │
-         ┌─────────────▼─────────────┐
-         │  Module 1: Normalisation  │  IDNA UTS-46, tldextract, IP handling
-         └─────────────┬─────────────┘
-                       │
-         ┌─────────────▼─────────────┐
-         │  Module 2: Threat Intel   │  Local feed + URLhaus (TI_CRITICAL*)
-         └─────────────┬─────────────┘
-                       │ (skip live checks if TI_CRITICAL)
-         ┌─────────────▼─────────────┐
-         │  Module 3: Lexical        │  Phishing patterns, brands, TLDs, lure keywords
-         └─────────────┬─────────────┘
-                       │
-         ┌─────────────▼─────────────┐
-         │  Module 4: Safe Fetch     │  SSRF-protected: DNS A/AAAA, IP allowlist,
-         │                           │  redirect chain validation, 64KB body cap
-         └─────────────┬─────────────┘
-                       │
-         ┌─────────────▼─────────────┐
-         │  Module 5: TLS Analysis   │  Cert validity, hostname match, weak keys,
-         │                           │  distrusted CAs (weight=0, INFO only)
-         └─────────────┬─────────────┘
-                       │
-         ┌─────────────▼─────────────┐
-         │  Module 6: Headers        │  HSTS, CSP, X-Frame-Options, X-Content-Type-Options
-         └─────────────┬─────────────┘
-                       │
-         ┌─────────────▼─────────────┐
-         │  Scoring Engine           │  Sum weights (INFO excluded), TI_CRITICAL → confirmed_malicious,
-         │                           │  coverage < 0.5 → inconclusive
-         └─────────────┬─────────────┘
-                       │
-         ┌─────────────▼─────────────┐
-         │  Campaign Correlation     │  SQLite persistence, shared domain/IP/UPI/phone indicators
-         └─────────────┬─────────────┘
-                       │
-         ┌─────────────▼─────────────┐
-         │  Evidence-Grounded Explain│  Prompt-injection guard (<untrusted_evidence>),
-         │                           │  deterministic fallback, LLM chain (Groq→NVIDIA)
-         └─────────────┬─────────────┘
-                       │
-         ┌─────────────▼─────────────┐
-         │  On-Chain Anchoring       │  ThreatRegistry.sol + local hash-chained ledger
-         │  (Module 7)               │  SHA-256 commitments, privacy-preserving fingerprints
-         └───────────────────────────┘
-```
-
-## Modules 1–7 Mapping
-
-| Module | Component | File | Purpose |
-|--------|-----------|------|---------|
-| 1 | Normalisation | `src/trustlens/checks/normalise.py` | URL canonicalisation, IDNA UTS-46, registrable domain extraction |
-| 2 | Threat Intel | `src/trustlens/checks/intel.py` | Local feed + URLhaus lookup, `TI_CRITICAL_*` findings |
-| 3 | Lexical | `src/trustlens/checks/lexical.py` | Phishing patterns: IP host, punycode, mixed scripts, brand subdomain, combo-squat, typosquat, deep subdomains, suspicious TLDs, lure keywords |
-| 4 | Safe Fetch | `src/trustlens/checks/safefetch.py` | SSRF-protected HTTP fetch with DNS resolution, IP allowlist, redirect validation, 64KB cap |
-| 5 | TLS Analysis | `src/trustlens/checks/tls.py` | Certificate validity, hostname/SAN matching, weak keys, distrusted CAs (weight=0) |
-| 6 | Security Headers | `src/trustlens/checks/headers.py` | HSTS, CSP, X-Frame-Options, X-Content-Type-Options |
-| 7 | Campaign Correlation | `src/trustlens/db.py` | SQLite persistence, report hashing, correlation via shared indicators |
-| 8 | Explainability | `src/trustlens/explain.py` | Evidence-grounded LLM explanation with prompt-injection guard |
-| 9 | On-Chain Verification | `contracts/ThreatRegistry.sol`, `src/trustlens/chain.py` | EVM smart contract + local reproducible ledger |
-
-## Security & Privacy Guarantees
-
-### SSRF Protection (Module 4: Safe Fetch)
-- Separate A/AAAA DNS resolution via `dns.asyncresolver`
-- IP allowlisting: blocks private (RFC1918), loopback, link-local, multicast, reserved, documentation ranges
-- Per-hop redirect validation: every redirect target re-resolved and re-validated
-- 64KB response body cap, non-HTML content yields no preview
-- 5s total timeout, 2s connect timeout
-
-### Prompt-Injection Isolation (Module 8: Explainability)
-- All untrusted data (target URL/message, finding evidence) wrapped in `<untrusted_evidence>` XML tags
-- System prompt explicitly forbids following instructions inside `<untrusted_evidence>`
-- Deterministic fallback explanation generated first; LLM output never mutates `classification`, `score`, or `findings`
-- LLM timeout: 6s with fallback chain (Groq → NVIDIA)
-
-### TLS Weight=0 Rule (Module 5)
-- TLS findings always emit `Severity.INFO` with `weight=0`
-- Valid certificate ≠ legitimate site (explicit limitation in every explanation)
-- Certificate issues (expiry, hostname mismatch, weak keys, distrusted CAs) reported as INFO only
-
-### Off-Chain PII Hashing (Module 9)
-- Raw URLs, message content, emails, phones, UPI IDs **never** stored on-chain or in ledger
-- Only `target_fingerprint = SHA-256(target)` stored on-chain
-- Report hash commits to canonical JSON: `{kind, target_hash, classification, score, finding_ids, timestamp_iso}`
-
-### Campaign Correlation Privacy
-- Correlation via hashed indicators (domain, IP, UPI, phone)
-- No PII exposed in correlation logic
-
-## REST API Reference
-
-Base URL: `http://localhost:8000` (or deployed endpoint)
-
-All endpoints support CORS (`allow_origins=["*"]`) for frontend integration.
-
-### `GET /health`
-Liveness/readiness probe.
-
-**Response:**
-```json
-{ "status": "ok" }
-```
+A deterministic threat classification engine for URL and message (SMS/email) scam detection with evidence-backed assessments, LLM explainability, and tamper-evident report integrity via local hash-chained ledger or optional on-chain anchoring.
 
 ---
 
-### `POST /api/check-url`
-Assess a single URL.
+## Problem
 
-**Request:**
-```json
-{ "url": "https://paypal.phishersite.com/login" }
-```
+Online scams—phishing links, smishing messages, social-engineering lures—are pervasive and evolving. Security teams and end users lack transparent, deterministic tools that:
 
-**Response (Assessment):**
-```json
-{
-  "report_id": "uuid",
-  "kind": "url",
-  "target": "https://paypal.phishersite.com/login",
-  "classification": "high_risk",
-  "score": 65,
-  "findings": [
-    {
-      "id": "LEX_BRAND_SUBDOMAIN",
-      "check": "lexical",
-      "title": "Brand name in subdomain",
-      "severity": "high",
-      "evidence": "Subdomain contains brand: paypal (full host: paypal.phishersite.com)",
-      "source": "lexical_analysis",
-      "confidence": 0.9,
-      "weight": 45,
-      "impact": "Attackers use trusted brand names in subdomains to spoof legitimacy",
-      "recommendation": "Verify the registrable domain (phishersite.com), not the subdomain"
-    }
-  ],
-  "checks": [
-    { "check": "intel", "ran": true },
-    { "check": "lexical", "ran": true },
-    { "check": "safefetch", "ran": false, "reason": "Skipped live fetch for confirmed malicious target" },
-    { "check": "tls", "ran": false, "reason": "Skipped: no fetch response available" },
-    { "check": "headers", "ran": false, "reason": "Skipped: no fetch response available" }
-  ],
-  "coverage": 0.4,
-  "unavailable_checks": ["safefetch", "tls", "headers"],
-  "explanation": "Verdict: High Risk (Score: 65/100)...",
-  "limitations": [
-    "Absence of known threats is not proof a site is safe.",
-    "A valid TLS certificate does not mean a site is legitimate."
-  ],
-  "related_reports": [
-    { "report_id": "...", "target": "...", "classification": "high_risk", "shared_indicator": "domain:phishersite.com", "created_at": "..." }
-  ],
-  "report_hash": "0x...",
-  "tx_hash": null,
-  "timestamp": "2024-01-15T10:30:00Z"
-}
-```
+- Show **exactly which checks ran** and **what evidence each produced**
+- Separate **observed facts** (TLS cert validity, header presence, brand-in-subdomain) from **assumptions** (AI verdicts, reputation scores)
+- Provide **coverage metrics** so gaps in analysis are visible (e.g., "threat intel unavailable," "fetch blocked by SSRF protection")
+- Preserve **tamper-evident report integrity** without storing raw URLs or PII on-chain
+
+Existing solutions often rely on black-box reputation APIs or AI classifiers that output a score without an auditable trail.
 
 ---
 
-### `POST /api/check-message`
-Assess a message text (SMS, email, chat).
+## Solution
 
-**Request:**
-```json
-{
-  "text": "URGENT: Your SBI account blocked. Share OTP 123456. Pay via UPI: user@oksbi. Link: https://sbi-verify.phishersite.com"
-}
-```
+TrustLens runs a **9-module deterministic pipeline** against a URL or message text. Each module emits findings with `severity`, `confidence`, `weight`, and `source`. A scoring engine aggregates weights (excluding `INFO` severity) into a 0–100 risk score, maps it to a classification (`low_risk` → `confirmed_malicious` → `inconclusive`), and records which checks ran vs. were skipped.
 
-**Response:** Same `Assessment` structure as `/api/check-url` with `kind: "message"` and message-specific findings (`MSG_CREDENTIAL_REQUEST`, `MSG_URGENCY_COERCION`, `MSG_PAYMENT_LURE`, `MSG_IMPERSONATION`).
+**Key guarantees:**
 
----
+| Guarantee | Implementation |
+|-----------|----------------|
+| **SSRF-safe fetch** | Separate A/AAAA DNS resolution, IP allowlist (blocks RFC1918, loopback, link-local, multicast, reserved), per-hop redirect re-validation, 64 KB body cap, 5 s timeout |
+| **Prompt-injection isolation** | All untrusted data wrapped in `<untrusted_evidence>` XML tags; system prompt forbids following instructions inside; deterministic fallback generated first; LLM never mutates classification/score/findings |
+| **TLS weight = 0** | TLS findings always emit `Severity.INFO` (weight 0)—valid cert ≠ legitimate site |
+| **Off-chain PII hashing** | Raw URLs, messages, emails, phones, UPI IDs never stored on-chain; only `SHA-256(target)` fingerprint committed |
+| **Campaign correlation privacy** | Correlation via hashed indicators (domain, IP, UPI, phone)—no PII exposed |
 
-### `GET /api/reports`
-List recent assessment reports.
-
-**Query Parameters:**
-- `limit` (optional, default: 20)
-
-**Response:**
-```json
-{
-  "reports": [
-    {
-      "report_id": "uuid",
-      "kind": "url",
-      "target": "https://...",
-      "classification": "high_risk",
-      "score": 65,
-      "created_at": "2024-01-15T10:30:00Z"
-    }
-  ]
-}
-```
+**Frontend workspace** provides:
+- Landing page with live demo mode (local simulation, clearly labelled)
+- Dashboard: Overview analytics, URL Intelligence scanner, Message Analysis, Threat Reports history, On-Chain Verification
+- Auth flow (sign-in/register) for workspace persistence
+- Motion respects `prefers-reduced-motion`; custom cursor effects disabled on touch devices
 
 ---
 
-### `GET /api/reports/{report_id}`
-Retrieve a specific report by ID.
+## Demo Links and Screenshot
 
-**Response:** Full `Assessment` object (same as check endpoints).
+| Item | Status |
+|------|--------|
+| Live demo | **Pending** — not deployed |
+| GitHub repository | `https://github.com/<owner>/Scam_Genome` (replace with actual URL) |
+| Screenshot | **Not available** — no screenshots committed to repository |
 
----
-
-### `POST /api/reports/{report_id}/anchor`
-Anchor a saved report on-chain (EVM RPC) or in local hash-chained ledger.
-
-**Response:**
-```json
-{
-  "tx_hash": "0x...",
-  "report_hash": "0x...",
-  "target_fingerprint": "0x...",
-  "mode": "local_ledger",
-  "block_number": 5,
-  "contract_address": null
-}
-```
-
-**EVM RPC mode** (when `RPC_URL`, `CONTRACT_ADDRESS`, `PRIVATE_KEY` configured):
-```json
-{
-  "tx_hash": "0x...",
-  "report_hash": "0x...",
-  "target_fingerprint": "0x...",
-  "mode": "evm_rpc",
-  "block_number": null,
-  "contract_address": "0x..."
-}
-```
+> **Note**: The frontend runs in `VITE_DEMO_MODE=true` by default, using a local simulation that does **not** call the backend. Set `VITE_DEMO_MODE=false` and configure `VITE_API_BASE_URL` to connect to a running FastAPI instance.
 
 ---
 
-### `GET /api/reports/{report_id}/verify`
-Verify a report's cryptographic integrity and on-chain/ledger commitment.
+## Tech Stack
 
-**Response:**
-```json
-{
-  "report_id": "uuid",
-  "stored_hash": "0x...",
-  "recomputed_hash": "0x...",
-  "on_chain_hash": "0x...",
-  "tx_hash": "0x...",
-  "target_fingerprint": "0x...",
-  "anchored": true,
-  "integrity_verified": true,
-  "provenance_note": "Cryptographic commitment verifies report integrity and history, not the ground-truth validity of the underlying claim."
-}
+| Layer | Technologies |
+|-------|--------------|
+| **Backend** | Python 3.12+, FastAPI, uvicorn, pydantic, httpx, dnspython, cryptography, tldextract, idna, rapidfuzz, python-dotenv |
+| **Frontend** | React 18, Vite, TypeScript, Tailwind CSS, Framer Motion, react-spring/web, spring-text-engine, GSAP, lucide-react |
+| **Smart Contract** | Solidity (ThreatRegistry.sol), Forge/Foundry for build/deploy |
+| **Database** | SQLite (local file `trustlens.db`) |
+| **Testing** | pytest + pytest-asyncio (backend), Playwright (frontend E2E) |
+| **LLM Explainability (optional)** | Groq API, NVIDIA API (fallback chain with 6 s timeout) |
+| **Threat Intel (optional)** | URLhaus API |
+| **On-Chain (optional)** | EVM RPC (Anvil, Geth, etc.), private key for signing |
+
+---
+
+## Architecture
+
+### Backend Pipeline (9 Modules)
+
+```
+Input: URL or Message Text
+         │
+         ▼
+┌──────────────────────────────────────────┐
+│ 1. Normalisation                         │  IDNA UTS-46, tldextract, IP handling
+└──────────────────────────────────────────┘
+         │
+         ▼
+┌──────────────────────────────────────────┐
+│ 2. Threat Intel                          │  Local feed + URLhaus (TI_CRITICAL*)
+└──────────────────────────────────────────┘
+         │  (skip live checks if TI_CRITICAL)
+         ▼
+┌──────────────────────────────────────────┐
+│ 3. Lexical Analysis                      │  Phishing patterns: IP host, punycode,
+│                                          │  mixed scripts, brand subdomain, combo-squat,
+│                                          │  typosquat, deep subdomains, suspicious TLDs,
+│                                          │  lure keywords
+└──────────────────────────────────────────┘
+         │
+         ▼
+┌──────────────────────────────────────────┐
+│ 4. Safe Fetch                            │  SSRF-protected: DNS A/AAAA, IP allowlist,
+│                                          │  redirect chain validation, 64 KB body cap
+└──────────────────────────────────────────┘
+         │
+         ▼
+┌──────────────────────────────────────────┐
+│ 5. TLS Analysis                          │  Cert validity, hostname/SAN match,
+│                                          │  weak keys, distrusted CAs (weight=0)
+└──────────────────────────────────────────┘
+         │
+         ▼
+┌──────────────────────────────────────────┐
+│ 6. Security Headers                      │  HSTS, CSP, X-Frame-Options,
+│                                          │  X-Content-Type-Options
+└──────────────────────────────────────────┘
+         │
+         ▼
+┌──────────────────────────────────────────┐
+│ 7. Scoring Engine                        │  Sum weights (INFO excluded),
+│                                          │  TI_CRITICAL → confirmed_malicious,
+│                                          │  coverage < 0.5 → inconclusive
+└──────────────────────────────────────────┘
+         │
+         ▼
+┌──────────────────────────────────────────┐
+│ 8. Campaign Correlation                  │  SQLite persistence, report hashing,
+│                                          │  shared domain/IP/UPI/phone indicators
+└──────────────────────────────────────────┘
+         │
+         ▼
+┌──────────────────────────────────────────┐
+│ 9. Evidence-Grounded Explainability      │  Prompt-injection guard
+│                                          │  (<untrusted_evidence>), deterministic
+│                                          │  fallback, LLM chain (Groq→NVIDIA)
+└──────────────────────────────────────────┘
+         │
+         ▼
+┌──────────────────────────────────────────┐
+│ 10. On-Chain Anchoring (Module 9)        │  ThreatRegistry.sol + local hash-chained
+│                                          │  ledger, SHA-256 commitments
+└──────────────────────────────────────────┘
 ```
 
-**If not yet anchored:**
-```json
-{
-  "report_id": "uuid",
-  "stored_hash": "0x...",
-  "recomputed_hash": "0x...",
-  "on_chain_hash": null,
-  "tx_hash": null,
-  "target_fingerprint": "0x...",
-  "anchored": false,
-  "integrity_verified": true,
-  "provenance_note": "..."
-}
+### Frontend Structure
+
+```
+src/
+├── App.jsx              # Routes: landing / auth / dashboard (overview, url-scanner,
+│                        # message-scanner, reports, verification)
+├── main.jsx             # Entry point
+├── styles.css           # Tailwind + custom CSS (ambient grid, orbs, cursor FX)
+└── trustlens/           # (Python package, not frontend)
 ```
 
-**If tampered after anchoring:**
-```json
-{
-  "integrity_verified": false,
-  "recomputed_hash": "0x...",
-  "stored_hash": "0x...",
-  "on_chain_hash": "0x..."  // original anchored hash
-}
-```
+### API Endpoints (Backend)
 
-## Setup
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /health` | Liveness probe |
+| `POST /api/check-url` | Core URL assessment (returns full `Assessment`) |
+| `POST /api/check-message` | Core message assessment |
+| `GET /api/reports` | List recent reports |
+| `GET /api/reports/{id}` | Retrieve full report |
+| `POST /api/reports/{id}/anchor` | Anchor report on-chain / local ledger |
+| `GET /api/reports/{id}/verify` | Verify cryptographic integrity |
+| `POST /api/scan/url` | Frontend-compatible URL scan |
+| `POST /api/scan/message` | Frontend-compatible message scan |
+| `POST /api/reports/{id}/register` | Frontend alias for anchor |
+| `GET /api/reports/{id}/verify` | Frontend-compatible verify |
+
+---
+
+## Setup and Run Steps
 
 ### Prerequisites
-- Python 3.11+
+- Python 3.12+
 - `uv` (recommended) or `pip`
-- Optional: EVM RPC node (Anvil, Geth, etc.) for on-chain mode
+- Node.js 18+
+- Optional: EVM RPC node (Anvil, Geth) for on-chain anchoring
 
-### Installation
+### Backend
+
 ```bash
 # Clone and enter directory
 cd Scam_Genome
 
 # Install dependencies
 uv sync
+# or: pip install -e .
 
-# Or with pip
-pip install -e .
-```
+# Configure environment (copy .env.example to .env and edit)
+cp .env.example .env
+# Required for on-chain (optional):
+# RPC_URL=http://127.0.0.1:8545
+# CONTRACT_ADDRESS=0x...
+# PRIVATE_KEY=0x...
+# Optional LLM keys:
+# GROQ_API_KEY=gsk_...
+# NVIDIA_API_KEY=nvapi_...
+# Optional threat intel:
+# URLHAUS_API_KEY=...
+# Offline mode (deterministic, no network):
+# OFFLINE_MODE=1
 
-### Configuration
-Environment variables (`.env` file or shell):
-
-```bash
-# Required for on-chain anchoring (optional)
-RPC_URL=http://127.0.0.1:8545
-CONTRACT_ADDRESS=0x...
-PRIVATE_KEY=0x...
-
-# Database
-DB_PATH=trustlens.db
-
-# LLM API keys for explanation (optional, falls back to deterministic)
-GROQ_API_KEY=gsk_...
-NVIDIA_API_KEY=nvapi_...
-
-# Threat intel
-URLHAUS_API_KEY=...
-
-# Offline mode (deterministic, no network calls)
-OFFLINE_MODE=1
-```
-
-### Running the API Server
-```bash
-# Development
+# Run development server
 uv run uvicorn trustlens.api:app --reload --port 8000
 
-# Production
+# Run production server
 uv run uvicorn trustlens.api:app --host 0.0.0.0 --port 8000
 ```
 
-### Deploying the Smart Contract
+### Frontend
+
 ```bash
-# Using Forge (recommended)
+# From repository root
+npm install
+
+# Configure (copy .env.example to .env and edit)
+cp .env.example .env
+# VITE_API_BASE_URL=http://127.0.0.1:8000
+# VITE_DEMO_MODE=true  # Set false when backend is ready
+
+# Run development server
+npm run dev
+
+# Build for production
+npm run build
+
+# Preview production build
+npm run preview
+```
+
+### Smart Contract (Optional)
+
+```bash
 cd contracts
 forge build
-forge create contracts/ThreatRegistry.sol:ThreatRegistry --rpc-url $RPC_URL --private-key $PRIVATE_KEY
-
-# Note the deployed address and set CONTRACT_ADDRESS
+forge create contracts/ThreatRegistry.sol:ThreatRegistry \
+  --rpc-url $RPC_URL \
+  --private-key $PRIVATE_KEY
+# Note deployed address and set CONTRACT_ADDRESS in backend .env
 ```
 
-## Test Commands
+### Run Tests
 
-### Run All Tests
 ```bash
+# Backend tests
 uv run pytest -q
-```
 
-### Run Specific Test Modules
-```bash
-# Unit tests for each module
+# Specific modules
 uv run pytest tests/test_lexical.py -v
-uv run pytest tests/test_safefetch.py -v
-uv run pytest tests/test_tls.py -v
-uv run pytest tests/test_intel.py -v
-uv run pytest tests/test_headers.py -v
-uv run pytest tests/test_scoring.py -v
 uv run pytest tests/test_pipeline.py -v
-uv run pytest tests/test_message_analyze.py -v
-uv run pytest tests/test_message_extract.py -v
-uv run pytest tests/test_db_correlation.py -v
-uv run pytest tests/test_explain.py -v
 uv run pytest tests/test_chain.py -v
-```
+# ... (13 test modules total)
 
-### Run Demo Cases & Generate Report
-```bash
+# Generate demo report
 uv run python scripts/run_demo_cases.py
 # Output: docs/TESTING_REPORT.md
 ```
 
-### Quick API Test
-```bash
-# Health check
-curl http://localhost:8000/health
+> **Current test status**: 196 passed, 1 failed (`test_pipeline_runs_all_checks` — TLS check connects to real `example.com` instead of using mock; see issue in test file).
 
-# Check URL
-curl -X POST http://localhost:8000/api/check-url \
-  -H "Content-Type: application/json" \
-  -d '{"url": "https://paypal.phishersite.com/login"}'
+---
 
-# Check message
-curl -X POST http://localhost:8000/api/check-message \
-  -H "Content-Type: application/json" \
-  -d '{"text": "URGENT: Share OTP 123456. Pay via UPI: user@oksbi"}'
+## Disclosures
 
-# List reports
-curl http://localhost:8000/api/reports
+### Libraries & Frameworks
+- **Backend**: FastAPI, uvicorn, pydantic, httpx, dnspython, cryptography, tldextract, idna, rapidfuzz, python-dotenv, pytest, pytest-asyncio
+- **Frontend**: React, Vite, TypeScript, Tailwind CSS, Framer Motion, react-spring/web, spring-text-engine, GSAP, lucide-react
+- **Smart Contract**: Solidity, Forge/Foundry
+- **Database**: SQLite (stdlib `sqlite3`)
 
-# Anchor report
-curl -X POST http://localhost:8000/api/reports/{report_id}/anchor
+### Templates / Boilerplates
+- No external templates or boilerplates identified. Frontend is custom-built with Vite + React. Backend is custom FastAPI application.
 
-# Verify report
-curl http://localhost:8000/api/reports/{report_id}/verify
-```
+### AI Tools Used
+- **Claude Code** (Anthropic) — used for development assistance, code review, test debugging, and documentation tasks during this project.
 
-## Classification Reference
+---
 
-| Classification | Code | Description |
-|----------------|------|-------------|
-| `low_risk` | 0 | No significant findings, score 0–15 |
-| `suspicious` | 1 | Low/medium findings, score 15–39 |
-| `high_risk` | 2 | High severity findings, score 40–79 |
-| `confirmed_malicious` | 3 | `TI_CRITICAL_*` finding present |
-| `inconclusive` | 4 | Coverage < 50% (checks skipped/failed) |
+## Track
 
-## Severity Reference
+**Security / Threat Intelligence / Web3** — TrustLens is a deterministic web threat detection engine with optional blockchain anchoring for report integrity. It targets security teams, fraud analysts, and developers building safety tooling for URLs and messaging channels.
 
-| Severity | Weight Range | Used For |
-|----------|--------------|----------|
-| `info` | 0 | TLS valid, informational headers |
-| `low` | 1–15 | Missing security headers, urgency keywords |
-| `medium` | 16–39 | Payment lures, impersonation, lure keywords |
-| `high` | 40–69 | Brand subdomain, credential requests, typosquat |
-| `critical` | 70–100 | Threat intel matches (`TI_CRITICAL_*`) |
+### Implemented vs. Experimental
+
+| Feature | Status |
+|---------|--------|
+| 9-module deterministic pipeline | ✅ Implemented |
+| SSRF-safe fetch with IP allowlist | ✅ Implemented |
+| Threat intel (local + URLhaus) | ✅ Implemented (URLhaus requires API key) |
+| Lexical analysis (20+ patterns) | ✅ Implemented |
+| TLS analysis (weight=0 rule) | ✅ Implemented |
+| Security headers inspection | ✅ Implemented |
+| Campaign correlation (SQLite) | ✅ Implemented |
+| LLM explainability (Groq→NVIDIA fallback) | ✅ Implemented (requires API keys) |
+| Prompt-injection guard | ✅ Implemented |
+| Local hash-chained ledger | ✅ Implemented |
+| On-chain anchoring (ThreatRegistry.sol) | ✅ Implemented (requires RPC + contract deploy) |
+| Frontend dashboard (5 tabs) | ✅ Implemented |
+| Demo mode (local simulation) | ✅ Implemented |
+| Auth flow (UI only, no backend) | ⚠️ Simulated (no real auth backend) |
+| Live demo deployment | ❌ Pending |
+| End-to-end test suite | ⚠️ Partial (backend only) |
+
+### Blockchain / Local-Ledger Limitations
+- **Local ledger**: File-based hash chain (`trustlens_ledger.jsonl`) — tamper-evident only within a single machine/process; not distributed.
+- **On-chain**: Requires deployed `ThreatRegistry.sol`, funded account, and RPC endpoint. Gas costs apply. Only the `SHA-256(target)` fingerprint and canonical report hash are stored on-chain—**never raw URLs, messages, or PII**.
+- **Verification**: Confirms the report content matches the anchored commitment. It does **not** validate the ground-truth correctness of the original assessment.
+
+---
 
 ## License
 
-MIT License — see LICENSE file for details.
-# Scam_Genome / TrustLens
-
-A Digital DNA System for Identifying, Comparing and Tracking Online Fraud Campaigns.
-
-This repository includes the TrustLens React/Vite frontend for a Web Threat Detection & Digital Trust Platform.
-
-## Run locally
-
-1. Install Node.js 18+.
-2. Run `npm install`.
-3. Copy `.env.example` to `.env` and configure `VITE_API_BASE_URL`.
-4. Run `npm run dev`.
-
-## Backend integration contract
-
-The UI is configured to call:
-
-- `POST /api/scan/url` with `{ "url": "https://example.com" }`
-- `POST /api/scan/message` with `{ "message": "..." }`
-- `POST /api/reports/{reportId}/register` to register a report
-- `GET /api/reports/{reportId}/verify` to verify integrity
-
-Set `VITE_DEMO_MODE=false` when the FastAPI backend is ready. In demo mode, the interface uses a clearly labelled local simulation and does not claim to perform real security analysis.
-
-## Design notes
-
-- Custom cursor and glow effects are disabled on touch devices.
-- Motion respects `prefers-reduced-motion`.
-- Never expose API secrets in frontend environment variables. Keep provider keys on the backend.
+MIT License — see [LICENSE](LICENSE) for details.
